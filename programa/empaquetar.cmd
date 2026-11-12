@@ -11,6 +11,8 @@ mkdir salida\paquete\Assets
 copy /y paquete\AppxManifest.xml salida\paquete\ >nul
 copy /y paquete\Assets\*.png salida\paquete\Assets\ >nul
 copy /y salida\ForeverTracker.exe salida\paquete\ >nul
+rem El mismo programa con otro nombre: el que arranca con Windows (ver AppxManifest.xml).
+copy /y salida\ForeverTracker.exe salida\paquete\ForeverTrackerFondo.exe >nul
 "%MAKEAPPX%" pack /o /d salida\paquete /p salida\ForeverTracker.msix
 if errorlevel 1 exit /b 1
 echo Paquete: %~dp0salida\ForeverTracker.msix

@@ -26,7 +26,7 @@ namespace ForeverTracker
 {
     public static class Programa
     {
-        public const string Version = "1.0.2";
+        public const string Version = "1.0.3";
         public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
 
         [STAThread]
@@ -46,6 +46,9 @@ namespace ForeverTracker
                 else if (a == "--web" && i + 1 < args.Length) web = args[++i];
                 else if (a == "--captura" && i + 1 < args.Length) captura = args[++i];
             }
+            // Paquete de la Store (desde la 1.0.3): la tarea de inicio de Windows arranca una copia llamada ForeverTrackerFondo.exe
+            // (no admite parámetros sin una segunda aplicación oculta, que la Store no deja tener): con ese nombre, sin ventana.
+            if (Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetExecutingAssembly().Location).EndsWith("Fondo", StringComparison.OrdinalIgnoreCase)) fondo = true;
             string datos = pruebas != null ? Path.GetFullPath(pruebas) : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForeverTracker");
             Directory.CreateDirectory(datos);
             Registro.Archivo = Path.Combine(datos, "registro.txt");
