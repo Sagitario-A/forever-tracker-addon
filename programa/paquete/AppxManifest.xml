@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paquete de la Microsoft Store (MSIX) de Forever Tracker.
+  Name y Publisher son los que da la Store al reservar el nombre.
+  Dos aplicaciones con el mismo .exe:
+    ForeverTracker  la que sale en el menú Inicio (abre la ventana de estado)
+    Fondo           sin entrada en el menú; es la que arranca con Windows (tarea de inicio), con el parámetro de ir en segundo plano (sin ventana)
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 desktop rescap">
+  <Identity Name="KikoGabana.ForeverTracker" Publisher="CN=590A76BD-AC9C-40A3-8315-FD8B201D4C44" Version="1.0.2.0" ProcessorArchitecture="neutral" />
+  <Properties>
+    <DisplayName>Forever Tracker</DisplayName>
+    <PublisherDisplayName>Kiko Gabana</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Sube solo tus datos del juego (addon Forever Tracker) a la web Forever Tracker y mantiene el addon al día. Necesita World of Warcraft: Forever.</Description>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="es-ES" />
+  </Resources>
+  <Applications>
+    <Application Id="ForeverTracker" Executable="ForeverTracker.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Forever Tracker" Description="Forever Tracker: sube tus datos del juego a la web"
+        BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+    <Application Id="Fondo" Executable="ForeverTracker.exe" EntryPoint="Windows.FullTrustApplication" uap10:Parameters="--fondo">
+      <uap:VisualElements DisplayName="Forever Tracker (en segundo plano)" Description="Forever Tracker en segundo plano"
+        BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" AppListEntry="none" />
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="ForeverTracker.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="ForeverTrackerInicio" Enabled="true" DisplayName="Forever Tracker" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

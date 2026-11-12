@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: Forever Tracker
+## Notes: Guarda el progreso de tus personajes para verlo en la web Forever Tracker. Solo lee: no hace nada en el juego. /ft
+## Notes-enUS: Saves your characters' progress to view it on the Forever Tracker website. Read-only: it does nothing in the game. /ft
+## Author: Forever Tracker
+## Version: 1.2.2
+## SavedVariables: ForeverTrackerDB, ForeverTrackerVistos
+## SavedVariablesPerCharacter: ForeverTrackerChar
+
+Datos.lua
+ForeverTracker.lua
+Vistos.lua
