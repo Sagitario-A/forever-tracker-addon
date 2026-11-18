@@ -68,7 +68,7 @@ namespace ForeverTracker
     public class Dialogo : Form
     {
         const int Ancho = 440;
-        bool si;
+        bool si, no, segundo; // «segundo»: el segundo botón es una elección (no un «cancelar»), y se distingue de cerrar la ventana
 
         // Con «cabecera», la ventanita lleva el icono y el título como la bienvenida, un titular y una nota en gris (la de instalar).
         Dialogo(string texto, string botonSi, string botonNo, bool cabecera = false, string titular = null, string nota = null)
@@ -117,7 +117,7 @@ namespace ForeverTracker
             var b1 = Tema.Boton(botonSi, true, (s, e) => { si = true; Close(); });
             fila.Controls.Add(b1);
             Button b2 = null;
-            if (botonNo != null) fila.Controls.Add(b2 = Tema.Boton(botonNo, false, (s, e) => Close()));
+            if (botonNo != null) fila.Controls.Add(b2 = Tema.Boton(botonNo, false, (s, e) => { no = segundo; Close(); }));
             if (cabecera)
             {
                 b1.Padding = new Padding(22, 8, 22, 8); b1.Margin = new Padding(0, 0, 14, 0); b1.Font = new Font(Tema.Letra, 11f, FontStyle.Bold);
@@ -131,6 +131,13 @@ namespace ForeverTracker
         }
 
         protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Tema.BarraOscura(this); }
+
+        // Delante de lo demás al salir (si no, tras el aviso de SmartScreen o desde otro programa se queda detrás; visto el 2026-11-18).
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (Owner == null) { TopMost = true; Activate(); TopMost = false; }
+        }
 
         // Pregunta sí/no; con «owner» null, en medio de la pantalla.
         public static bool Pregunta(IWin32Window owner, string texto, string botonSi, string botonNo)
@@ -146,6 +153,18 @@ namespace ForeverTracker
         public static void Avisa(IWin32Window owner, string texto)
         {
             Pregunta(owner, texto, "Vale", null);
+        }
+
+        // Elegir entre dos: 1 el primero, 2 el segundo, 0 si se cierra la ventana sin elegir.
+        public static int Elige(IWin32Window owner, string texto, string boton1, string boton2)
+        {
+            using (var d = new Dialogo(texto, boton1, boton2))
+            {
+                d.segundo = true;
+                if (owner == null) Tema.EnMonitorPrincipal(d);
+                d.ShowDialog(owner);
+                return d.si ? 1 : d.no ? 2 : 0;
+            }
         }
 
         // La de instalar la descarga directa (la primera vez que se abre el .exe). Amable, clara y corta (decidido el 2026-11-18).

@@ -27,7 +27,7 @@ namespace ForeverTracker
 {
     public static class Programa
     {
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
         public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
 
         [STAThread]
@@ -81,6 +81,8 @@ namespace ForeverTracker
                     Instalacion.Instala(actualizar, id);
                     return;
                 }
+                // Instalado por los dos caminos (descarga directa y Store): al abrirlo con ventana, se ofrece quitar el otro.
+                if (pruebas == null && !fondo && Instalacion.ResuelveDoble(paquete, id)) return;
                 bool creado;
                 using (var m = new Mutex(true, @"Local\ForeverTracker-" + id, out creado))
                 {

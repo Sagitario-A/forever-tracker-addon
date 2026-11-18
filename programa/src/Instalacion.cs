@@ -134,6 +134,94 @@ namespace ForeverTracker
             Dialogo.Avisa(null, "Forever Tracker se ha desinstalado.");
         }
 
+        // ───────── instalado por los dos caminos (descarga directa y Store) ─────────
+        // Los dos comparten la carpeta de datos, así que solo funciona uno (el segundo en arrancar cede el paso). Al abrirlo con ventana,
+        // si detecta al otro, ofrece quitarlo (decidido el 2026-11-18). Los paquetes instalados del usuario están apuntados en el registro.
+        const string PaquetesKey = @"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages";
+        const string PaqueteNombre = "KikoGabana.ForeverTracker_";
+
+        public static bool HayPaquete()
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(PaquetesKey))
+                {
+                    if (k == null) return false;
+                    foreach (string n in k.GetSubKeyNames()) if (n.StartsWith(PaqueteNombre, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool HayDescargaDirecta()
+        {
+            try { using (var k = Registry.CurrentUser.OpenSubKey(UninstallKey)) if (k != null) return true; } catch { }
+            return File.Exists(ExeInstalado);
+        }
+
+        const string PaqueteFamilia = "KikoGabana.ForeverTracker_2swy4jnr5e7kc"; // identidad del paquete (la que dio la Store al reservar el nombre)
+
+        // Devuelve si esta copia tiene que cerrarse (porque el usuario se ha quedado con la otra).
+        public static bool ResuelveDoble(bool paquete, string idDatos)
+        {
+            if (paquete ? !HayDescargaDirecta() : !HayPaquete()) return false;
+            Registro.Apunta("Instalado dos veces (descarga directa y Microsoft Store); esta copia es " + (paquete ? "la de la Store." : "el .exe."));
+            // Dos botones claros, uno por cada forma (decidido el 2026-11-18): se queda la elegida y se quita la otra.
+            int e = Dialogo.Elige(null,
+                "Forever Tracker está instalado dos veces en este PC: desde la Microsoft Store y desde la descarga directa (.exe). Solo hace falta uno; los dos usan la misma cuenta vinculada y los mismos ajustes.\n\n¿Con cuál te quedas?",
+                "Quedarme con el de la Store", "Quedarme con el .exe");
+            if (e == 0) return false;
+            bool store = e == 1;
+            Programa.Senal("salir", idDatos); // la copia que esté funcionando (de la forma que sea) se cierra
+            Thread.Sleep(1500);
+            bool bien = true;
+            try
+            {
+                if (store && paquete) bien = QuitaDescargaDirecta();                       // soy la Store: quito el .exe y sigo
+                else if (!store && !paquete) bien = QuitaPaquete();                        // soy el .exe: quito la Store y sigo
+                else if (store && !paquete)                                                // soy el .exe y se queda la Store: me quito y la abro
+                {
+                    bien = QuitaDescargaDirecta();
+                    Process.Start(new ProcessStartInfo("explorer.exe", "shell:AppsFolder\\" + PaqueteFamilia + "!ForeverTracker") { UseShellExecute = false });
+                }
+                else                                                                       // soy la Store y se queda el .exe: PowerShell me quita y abre el .exe
+                {
+                    Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Start-Sleep 1; Get-AppxPackage -Name KikoGabana.ForeverTracker | Remove-AppxPackage; Start-Process '" + ExeInstalado + "'\"")
+                    { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
+                }
+            }
+            catch (Exception ex) { Registro.Apunta("No se pudo quitar la otra copia: " + ex.Message); bien = false; }
+            Registro.Apunta(bien ? "Se queda " + (store ? "la de la Store" : "el .exe") + "; la otra, quitada." : "No se pudo quitar la otra copia.");
+            if (!bien) Dialogo.Avisa(null, "No he podido quitar la otra copia. Quítala desde Configuración → Aplicaciones.");
+            return store != paquete; // me cierro si se queda la otra
+        }
+
+        // Quitar la descarga directa desde el paquete: arranque con Windows, acceso, entrada de «Aplicaciones instaladas» y su carpeta
+        // (los datos se quedan: son los mismos).
+        static bool QuitaDescargaDirecta()
+        {
+            try { using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true)) if (k != null && k.GetValue(Nombre) != null) k.DeleteValue(Nombre); } catch { }
+            try { File.Delete(Acceso); } catch { }
+            try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
+            try
+            {
+                Process.Start(new ProcessStartInfo("cmd.exe", "/c timeout /t 3 /nobreak >nul & rmdir /s /q \"" + CarpetaPrograma + "\"")
+                { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
+            }
+            catch { }
+            return true;
+        }
+
+        // Quitar el paquete de la Store desde la descarga directa: lo hace PowerShell (sin administrador, es del propio usuario).
+        static bool QuitaPaquete()
+        {
+            var p = Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"Get-AppxPackage -Name KikoGabana.ForeverTracker | Remove-AppxPackage\"")
+            { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
+            p.WaitForExit(120000);
+            return !HayPaquete();
+        }
+
         // ───────── arrancar con Windows (descarga directa: valor «ForeverTracker» de Run del usuario) ─────────
         public static bool ArrancaConWindows()
         {
