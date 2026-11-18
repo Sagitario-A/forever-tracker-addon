@@ -23,7 +23,6 @@ namespace ForeverTracker
         readonly SynchronizationContext ui;
 
         public event Action Cambio;          // algo ha cambiado: la ventana se repinta
-        public Func<string, bool> Pregunta;  // la pone la ventana mientras está abierta (sí/no al usuario)
 
         // Estado para la ventana
         public bool Vinculado { get { return clave != null; } }
@@ -31,9 +30,19 @@ namespace ForeverTracker
         public bool Vinculando;
         public string Aviso;                 // último problema (sin internet, juego no encontrado…)
         public bool Subiendo;
-        public string AddonInstalado, AddonUltimo, MensajeAddon;
-        public bool AddonFalta;              // hay que instalar o actualizar y no hay permiso todavía
+        public string AddonInstalado, AddonUltimo;
+        public string MensajeAddon;          // por qué no se ha podido instalar o poner al día (null si va bien)
+        public bool AddonInstalando;
         public string ProgramaNuevo;
+        public string EncargosLista;         // la última lista de encargos escrita en el addon y cuándo (para el registro)
+        public long EncargosEscrito;
+
+        // Desde la 1.1.0 el addon se instala y se pone al día solo, sin preguntar: en cuanto el PC está vinculado o se ha pulsado
+        // «Vincular este PC» en la bienvenida (que dice que lo instala). Antes de eso no se toca la carpeta del juego.
+        bool consentimiento;
+        bool PuedeAddon { get { return clave != null || consentimiento; } }
+        long proximosEncargos;               // cuándo toca volver a bajar la lista de encargos (cada hora)
+        bool bajandoEncargos, encargosOtraVez;
 
         FileSystemWatcher vigia;
         readonly Dictionary<string, Timer> esperas = new Dictionary<string, Timer>(StringComparer.OrdinalIgnoreCase);
@@ -79,14 +88,15 @@ namespace ForeverTracker
             // Desde la 1.0.2 no se empieza a vincular solo al abrirlo: hay que pulsar «Vincular este PC», con el texto de qué se
             // sube encima (permiso expreso antes de subir nada; norma 10.5.2 de la Microsoft Store). «vincular» es para pruebas.
             else if (vincular) Vincula();
-            bool hablo = await RevisaAddon(interactivo);
+            bool hablo = await RevisaAddon();
+            await BajaEncargos();
             await RevisaPrograma();
             // Sin conexión, se vuelve a mirar en 10 minutos; si no, en 6 horas.
             proximaRevision = Tiempo.Ahora() + (hablo ? 6 * 3600 * 1000L : 10 * 60 * 1000L);
             Recorta();
         }
 
-        // Cada 30 s: reintentos pendientes, el juego si no estaba, y cada 6 horas el addon y el programa.
+        // Cada 30 s: reintentos pendientes, el juego si no estaba, cada hora la lista de encargos, y cada 6 horas el addon y el programa.
         void Tic()
         {
             long ahora = Tiempo.Ahora();
@@ -97,13 +107,25 @@ namespace ForeverTracker
                 proximaRevision = ahora + 6 * 3600 * 1000L;
                 var t = RevisaAddonYPrograma();
             }
+            else if (clave != null && ahora >= proximosEncargos && proximosEncargos > 0)
+            {
+                var t = BajaEncargos();
+            }
             Avisa(); // «hace X minutos»
         }
 
         async Task RevisaAddonYPrograma()
         {
-            if (!await RevisaAddon(false)) proximaRevision = Tiempo.Ahora() + 10 * 60 * 1000L;
+            if (!await RevisaAddon()) proximaRevision = Tiempo.Ahora() + 10 * 60 * 1000L;
+            await BajaEncargos();
             await RevisaPrograma();
+            Recorta();
+        }
+
+        async Task RevisaAddonYEncargos()
+        {
+            await RevisaAddon();
+            await BajaEncargos();
             Recorta();
         }
 
@@ -123,6 +145,13 @@ namespace ForeverTracker
             Vigila();
         }
 
+        // Botón «Detectar carpeta»: busca el juego como al arrancar (Battle.net, registro de Windows, carpetas habituales).
+        public bool DetectaJuego()
+        {
+            string j = Juego.Busca();
+            return j != null && CambiaJuego(j);
+        }
+
         public bool CambiaJuego(string carpeta)
         {
             string j = Juego.Valida(carpeta);
@@ -132,7 +161,7 @@ namespace ForeverTracker
             if (vigia != null) { vigia.Dispose(); vigia = null; }
             BuscaJuego();
             RevisaTodo(false);
-            var t = RevisaAddon(true);
+            var t = RevisaAddonYEncargos();
             return true;
         }
 
@@ -237,6 +266,17 @@ namespace ForeverTracker
                 fallos.Remove(ruta);
                 if (Aviso != null && Aviso.StartsWith("No se puede hablar")) Aviso = null;
                 Registro.Apunta("Subido " + cuenta + ": " + A.Subidas[ruta].Resumen);
+                // Lo que la web dice de los lotes de la base común (campo «recopilador», desde el 2026-11-18; null si el archivo no trae lotes).
+                var rec = J.Obj(r.Json, "recopilador");
+                if (rec != null)
+                    Registro.Apunta(J.Txt(rec, "error") != null ? "Base común: " + J.Txt(rec, "error")
+                        : "Base común: " + J.Num(rec, "lotes") + " lotes en el archivo, " + J.Num(rec, "guardados") + " guardados, " + J.Num(rec, "repetidos") + " que la web ya tenía, "
+                          + J.Num(rec, "descartados") + " descartados, " + J.Num(rec, "errores") + " con error" + (J.Si(rec, "recoger") ? "" : " (el interruptor de la cuenta está apagado)") + ".");
+                A.Guarda();
+                Avisa();
+                // Con la subida hecha, la web ya tiene esos lotes: se vuelve a escribir Encargos.lua con «recibidos» al día.
+                await BajaEncargos();
+                return;
             }
             else if (r.Anulado)
             {
@@ -290,6 +330,8 @@ namespace ForeverTracker
         {
             int yo = ++vinculo;
             string nueva = Clave.Nueva();
+            // Pulsar «Vincular este PC» en la bienvenida es aceptar lo que dice: desde ahí el addon se instala solo.
+            if (!consentimiento) { consentimiento = true; var t = RevisaAddon(); }
             Vinculando = true; Codigo = null; MensajeVincular = "Preparando…"; Avisa();
             var r = await W.PostJson("/api/programa/vincular", new Dictionary<string, object> {
                 { "huella", Clave.Huella(nueva) }, { "pc", Environment.MachineName }, { "version", Programa.Version } });
@@ -323,7 +365,7 @@ namespace ForeverTracker
                     Registro.Apunta("Vinculado a la cuenta " + A.Cuenta);
                     Avisa();
                     RevisaTodo(false);
-                    await RevisaAddon(true);
+                    await RevisaAddonYEncargos();
                 }
                 else
                 {
@@ -368,8 +410,9 @@ namespace ForeverTracker
         // ───────── el addon ─────────
         Dictionary<string, object> infoAddon;
 
+        // Mira la versión publicada y, si falta o es vieja, instala o pone al día el addon solo (sin preguntar, desde la 1.1.0).
         // Devuelve si pudo hablar con la web.
-        public async Task<bool> RevisaAddon(bool preguntar)
+        public async Task<bool> RevisaAddon()
         {
             AddonInstalado = A.Juego == null ? null : Juego.VersionAddon(A.Juego); // lo que hay en el juego, con o sin conexión
             var r = await W.Get("/api/programa", null);
@@ -377,7 +420,6 @@ namespace ForeverTracker
             {
                 Registro.Apunta("No se pudo mirar la versión del addon: " + r.Error);
                 if (r.Estado == 0 && Aviso == null) Aviso = r.Error + ". Se volverá a intentar.";
-                MensajeAddon = "No se ha podido comprobar si hay una versión nueva.";
                 Avisa();
                 return false;
             }
@@ -386,58 +428,94 @@ namespace ForeverTracker
             programaInfo = J.Obj(r.Json, "programa");
             AddonUltimo = J.Txt(infoAddon, "version");
             AddonInstalado = A.Juego == null ? null : Juego.VersionAddon(A.Juego);
-            AddonFalta = false;
-            MensajeAddon = null;
-            if (A.Juego == null || AddonUltimo == null) { Avisa(); return true; }
-            if (AddonInstalado != null && Versiones.Compara(AddonInstalado, AddonUltimo) >= 0) { Avisa(); return true; }
-            // Falta o es viejo: con permiso, se pone solo; la primera vez se pregunta (si la ventana está abierta).
-            if (A.AddonPermiso == null && preguntar && Pregunta != null)
-            {
-                bool si = Pregunta(AddonInstalado == null
-                    ? "El addon Forever Tracker no está instalado en tu juego. Es el que guarda tus datos del juego.\n\n¿Lo instalo ahora? A partir de ahora lo mantendré al día yo solo."
-                    : "Hay una versión nueva del addon Forever Tracker (" + AddonUltimo + "; tienes la " + AddonInstalado + ").\n\n¿La instalo? A partir de ahora lo mantendré al día yo solo.");
-                A.AddonPermiso = si ? "si" : "no";
-                A.Guarda();
-            }
-            if (A.AddonPermiso == "si") await InstalaAddon();
-            else { AddonFalta = true; Avisa(); }
+            if (A.Juego == null || AddonUltimo == null || !PuedeAddon) { Avisa(); return true; }
+            if (AddonInstalado != null && Versiones.Compara(AddonInstalado, AddonUltimo) >= 0) { MensajeAddon = null; Avisa(); return true; }
+            // Falta o es viejo: se pone solo. Al cambiar la carpeta del addon se pierde Encargos.lua (el .zip trae el de por defecto):
+            // quien llama a esto llama después a BajaEncargos y lo vuelve a escribir con la lista de la web.
+            await InstalaAddon();
             return true;
         }
 
-        public async Task InstalaAddon()
+        // Devuelve si quedó instalado.
+        async Task<bool> InstalaAddon()
         {
-            if (infoAddon == null || A.Juego == null) return;
+            if (infoAddon == null || A.Juego == null || AddonInstalando) return false;
             string url = J.Txt(infoAddon, "url"), sha = J.Txt(infoAddon, "sha256");
             long tam = J.Num(infoAddon, "size");
-            MensajeAddon = "Descargando el addon…"; Avisa();
-            byte[] zip = await W.Descarga(url);
-            string huella = null;
-            if (zip != null) using (var h = SHA256.Create()) huella = Clave.Hex(h.ComputeHash(zip));
-            if (zip == null || huella != sha || zip.Length != tam)
-            {
-                MensajeAddon = "No se pudo descargar el addon (o llegó dañado). Se volverá a intentar más tarde.";
-                Registro.Apunta(MensajeAddon);
-                Avisa();
-                return;
-            }
+            AddonInstalando = true; MensajeAddon = null; Avisa();
             try
             {
+                byte[] zip = await W.Descarga(url);
+                string huella = null;
+                if (zip != null) using (var h = SHA256.Create()) huella = Clave.Hex(h.ComputeHash(zip));
+                if (zip == null || huella != sha || zip.Length != tam)
+                {
+                    MensajeAddon = "No se pudo descargar el addon (o llegó dañado). Se volverá a intentar más tarde.";
+                    Registro.Apunta(MensajeAddon);
+                    return false;
+                }
                 string juego = A.Juego;
                 await Task.Run(() => Juego.InstalaAddon(juego, zip));
                 AddonInstalado = Juego.VersionAddon(A.Juego);
-                AddonFalta = false;
-                MensajeAddon = "Addon " + AddonInstalado + " instalado. Se nota al entrar en el juego o con /reload.";
-                Registro.Apunta("Addon " + AddonInstalado + " instalado en " + Juego.CarpetaAddon(A.Juego));
+                Registro.Apunta("Addon " + AddonInstalado + " instalado en " + Juego.CarpetaAddon(A.Juego) + " (entra en vigor al entrar en el juego o con /reload).");
+                return true;
             }
             catch (Exception e)
             {
                 MensajeAddon = "No se pudo instalar el addon: " + e.Message;
                 Registro.Apunta(MensajeAddon);
+                return false;
             }
-            Avisa();
+            finally { AddonInstalando = false; Avisa(); }
         }
 
-        public void PermiteAddon() { A.AddonPermiso = "si"; A.Guarda(); var t = InstalaAddon(); }
+        // Botón «Volver a intentar» de la ventana cuando el addon no se pudo instalar.
+        public void ReintentaAddon() { var t = RevisaAddonYEncargos(); }
+
+        // ───────── los encargos ─────────
+        // La lista de encargos de la cuenta (GET /api/encargos, con la clave; trae «lua», el archivo entero) se escribe en
+        // Interface\AddOns\ForeverTracker\Encargos.lua: al arrancar, cada hora, después de instalar o poner al día el addon (la
+        // actualización pisa ese archivo con el de por defecto) y después de cada subida que vaya bien (así «recibidos» está al día y
+        // el addon borra del archivo los lotes que la web ya tiene). Solo con el PC vinculado y el addon en su carpeta.
+        public async Task BajaEncargos()
+        {
+            if (clave == null || A.Juego == null || !Directory.Exists(Juego.CarpetaAddon(A.Juego))) return;
+            if (bajandoEncargos) { encargosOtraVez = true; return; } // ya hay una en marcha: se repite al acabar
+            bajandoEncargos = true;
+            try
+            {
+                do
+                {
+                    encargosOtraVez = false;
+                    var r = await W.Get("/api/encargos", clave);
+                    if (r.Anulado) { Desvinculado(); return; }
+                    string lua = r.Bien ? r.Texto("lua") : null;
+                    if (lua == null)
+                    {
+                        Registro.Apunta("No se pudo bajar la lista de encargos: " + r.Error + ". Se volverá a intentar en 10 minutos.");
+                        proximosEncargos = Tiempo.Ahora() + 10 * 60 * 1000L;
+                        return;
+                    }
+                    try
+                    {
+                        string juego = A.Juego;
+                        await Task.Run(() => Juego.EscribeEncargos(juego, lua));
+                        EncargosLista = r.Texto("lista"); EncargosEscrito = Tiempo.Ahora();
+                        string rec = r.Texto("recibidos") ?? "";
+                        Registro.Apunta("Encargos.lua escrito: lista " + EncargosLista + ", " + J.Lista(r.Json, "grupos").Length + " grupos, " + (rec.Length == 0 ? 0 : rec.Split(',').Length)
+                            + " lotes que la web ya tiene, recoger " + (J.Si(r.Json, "recoger") ? "sí" : "no") + ", addon publicado " + r.Texto("addonUltimo") + ".");
+                    }
+                    catch (Exception e)
+                    {
+                        Registro.Apunta("No se pudo escribir Encargos.lua: " + e.Message + ". Se volverá a intentar en 10 minutos.");
+                        proximosEncargos = Tiempo.Ahora() + 10 * 60 * 1000L;
+                        return;
+                    }
+                    proximosEncargos = Tiempo.Ahora() + 3600 * 1000L;
+                } while (encargosOtraVez);
+            }
+            finally { bajandoEncargos = false; Avisa(); }
+        }
 
         // ───────── el programa (solo la descarga directa; el de la Store lo pone al día la Store) ─────────
         Dictionary<string, object> programaInfo;

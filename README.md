@@ -5,8 +5,9 @@ una web gratuita para seguir el progreso de tus personajes y el de tu hermandad.
 
 - **El addon** (`addon/ForeverTracker/`) guarda lo que el juego deja leer de tus personajes para que la web lo enseñe.
   Solo lee: nunca hace nada por ti en el juego.
-- **El programa** (`programa/`) sube ese archivo a tu cuenta de la web cada vez que el juego lo guarda y mantiene el
-  addon al día. No tiene ventana: funciona en segundo plano y arranca con Windows.
+- **El programa** (`programa/`) instala el addon en tu juego y lo mantiene al día solo, sube ese archivo a tu cuenta de
+  la web cada vez que el juego lo guarda y escribe en el addon la lista de encargos de la base común. Funciona en segundo
+  plano y arranca con Windows; su ventana (menú Inicio) solo enseña el estado.
 
 Web de jugadores, no oficial: sin relación con Blizzard Entertainment. World of Warcraft es una marca de Blizzard
 Entertainment.
@@ -20,8 +21,8 @@ addon up to date. MIT licensed.*
 - **Programa para Windows:** en la [página de descargas](https://forever-tracker.kikoernk.workers.dev/descargas) de la web.
   Se instala para tu usuario (sin administrador) y abre la web para vincular tu PC a tu cuenta.
 - **Solo el addon:** descárgalo de la misma página y descomprímelo en
-  `World of Warcraft\_forever_\Interface\AddOns\`. Después sube el archivo que guarda desde la web (Ajustes → «Datos del
-  juego»).
+  `World of Warcraft\_forever_\Interface\AddOns\`. Para que la web vea tus datos hace falta el programa: es quien sube el
+  archivo.
 
 ## Qué guarda el addon
 
@@ -32,18 +33,24 @@ En `WTF\Account\<cuenta>\SavedVariables\ForeverTracker.lua`, al cerrar sesión, 
    mascota del cazador, cuando abres su ventana.
 2. **De los jugadores que ves** fuera de combate: lo mismo que enseña de ellos la armería pública de Blizzard (nombre,
    nivel, clase, raza, facción y hermandad) y, para ti, cuándo y dónde te los cruzaste.
-3. **Nunca:** el chat, el nombre o número de tu cuenta de World of Warcraft, ni nada de tu ordenador.
+3. **Para la base común del juego** (desde la 1.3.0, se puede apagar en Ajustes de la web): lo que ves jugando (nombres
+   de personajes del juego, vendedores, misiones, botín, precios de la subasta…) en lotes con seudónimo, nunca con tu
+   nombre ni el de tu personaje.
+4. **Nunca:** el chat, el nombre o número de tu cuenta de World of Warcraft, ni nada de tu ordenador.
 
 Quién ve cada cosa en la web lo eliges tú. Más en la
 [política de privacidad](https://forever-tracker.kikoernk.workers.dev/privacidad).
 
 ## Qué hace el programa
 
-1. **Vincular:** crea una clave propia de tu PC (guardada cifrada con Windows), abre la web y espera a que aceptes con
-   el mismo código en los dos sitios. La web solo guarda una huella de la clave. Se puede anular desde la web.
+1. **Vincular:** la primera vez enseña una bienvenida con lo que hace; al pulsar «Vincular este PC» crea una clave propia
+   de tu PC (guardada cifrada con Windows), abre la web y espera a que aceptes con el mismo código en los dos sitios. La
+   web solo guarda una huella de la clave. Se puede anular desde la web.
 2. **Subir:** Windows le avisa cuando el juego escribe su archivo; entonces lo lee y lo sube si ha cambiado. No mira nada
    más del disco.
-3. **Addon:** comprueba la versión, lo descarga, comprueba su huella SHA-256 y cambia la carpeta de golpe.
+3. **Addon:** comprueba la versión, lo descarga, comprueba su huella SHA-256 y cambia la carpeta de golpe, sin preguntar.
+   Después escribe `Encargos.lua` con la lista que baja de la web (al arrancar, cada hora, tras actualizar el addon y tras
+   cada subida).
 4. **Actualizarse:** la descarga directa se pone al día sola de la misma forma; la versión de la Microsoft Store, por la
    Store.
 5. **Desinstalar:** Configuración → Aplicaciones. Desvincula el PC y borra todo lo suyo; el addon se queda en el juego.

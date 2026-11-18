@@ -22,8 +22,10 @@ namespace ForeverTracker
         public string Juego;                 // carpeta _forever_ del juego
         public string Web;                   // dirección de la web (solo en modo de pruebas)
         public string Cuenta;                // nombre de la cuenta vinculada, para enseñarlo
-        public string AddonPermiso;          // null = sin preguntar todavía, "si" o "no"
+        // (Hasta la 1.0.3 había «AddonPermiso»: desde la 1.1.0 el addon se instala y se pone al día solo, sin preguntar. Si un
+        // ajustes.json viejo lo trae, se ignora.)
         public bool ProbarActualizacion;     // solo en modo de pruebas (desde la 1.0.1): actualizarse también contra la web de pruebas
+        public string CapturaCarpeta;        // solo en modo de pruebas, para las capturas de la Store: la carpeta que se enseña y sin la marca de pruebas
         public bool InicioDecidido;          // ya no se usa (1.0.0 sin publicar: arranca siempre con Windows); se deja por ajustes viejos
         public Dictionary<string, string> Huellas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, Subida> Subidas = new Dictionary<string, Subida>(StringComparer.OrdinalIgnoreCase);

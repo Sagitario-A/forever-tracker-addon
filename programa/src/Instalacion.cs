@@ -20,6 +20,8 @@ namespace ForeverTracker
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         static extern int GetCurrentPackageFullName(ref int length, StringBuilder name);
+        [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
+        const int ASFW_ANY = -1;
 
         // ¿Va dentro del paquete de la Store?
         public static bool EsPaquete()
@@ -49,12 +51,7 @@ namespace ForeverTracker
         {
             if (!silencioso)
             {
-                var r = MessageBox.Show(
-                    "Se va a instalar Forever Tracker para tu usuario de Windows.\n\n" +
-                    "Sube solo tus datos del juego a la web cada vez que el juego los guarda, mantiene el addon al día y arranca con Windows (se puede quitar).\n\n" +
-                    "No hace falta ser administrador. Se desinstala desde Configuración → Aplicaciones.\n\n¿Instalarlo?",
-                    "Instalar Forever Tracker", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
-                if (r != DialogResult.OK) return;
+                if (!Dialogo.Instalar()) return;
             }
             // Si hay uno funcionando, se le pide que se cierre.
             Programa.Senal("salir", idDatos);
@@ -90,6 +87,8 @@ namespace ForeverTracker
                 k.SetValue("EstimatedSize", (int)(new FileInfo(ExeInstalado).Length / 1024), RegistryValueKind.DWord);
             }
             Registro.Apunta((silencioso ? "Actualizado" : "Instalado") + " en " + ExeInstalado);
+            // Que el programa recién instalado pueda poner su ventana delante (si no, sale detrás de las demás).
+            try { AllowSetForegroundWindow(ASFW_ANY); } catch { }
             Process.Start(new ProcessStartInfo(ExeInstalado, silencioso ? "--fondo" : "") { UseShellExecute = false });
         }
 
@@ -116,9 +115,8 @@ namespace ForeverTracker
         // el arranque con Windows, el acceso, la entrada, los datos y la carpeta del programa. El addon del juego se queda.
         public static void Desinstala(string datos, string idDatos, Func<bool> desvincula)
         {
-            var r = MessageBox.Show("¿Desinstalar Forever Tracker?\n\nEste PC se desvinculará de tu cuenta de la web. El addon del juego se queda: si quieres, bórralo de Interface\\AddOns.",
-                "Desinstalar Forever Tracker", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-            if (r != DialogResult.OK) return;
+            if (!Dialogo.Pregunta(null, "¿Desinstalar Forever Tracker?\n\nEste PC se desvinculará de tu cuenta de la web. El addon del juego se queda: si quieres, bórralo de Interface\\AddOns.",
+                "Desinstalar", "Cancelar")) return;
             Programa.Senal("salir", idDatos);
             Thread.Sleep(1500);
             try { desvincula(); } catch { }
@@ -133,7 +131,7 @@ namespace ForeverTracker
                 { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             }
             catch { }
-            MessageBox.Show("Forever Tracker se ha desinstalado.", "Forever Tracker", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Dialogo.Avisa(null, "Forever Tracker se ha desinstalado.");
         }
 
         // ───────── arrancar con Windows (descarga directa: valor «ForeverTracker» de Run del usuario) ─────────

@@ -13,7 +13,7 @@
 local ADDON, FT = ...
 
 local FORMATO = 1
-local VERSION = "1.2.2"
+local VERSION = "1.3.2"
 do
 	local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 	local ok, v = pcall(get, ADDON, "Version")
@@ -318,6 +318,26 @@ R.colecciones = function()
 		table.sort(out)
 		snap.juguetes = out
 	end
+	-- Transfiguraciones (1.3.1; diseno-addon-1.3.md 6.4.2; funciones probadas en el juego el 2026-11-18 con /run: GetCategoryAppearances(1)
+	-- devuelve 245 apariencias): por categoría de apariencia (1 a 30, las que existan), cuántas hay (n) y las que el personaje tiene
+	-- (tengo: visualID con isCollected). Sirve para la prueba cuenta/personaje (6.4) y, después, para enseñarlas en la web.
+	if C_TransmogCollection and C_TransmogCollection.GetCategoryAppearances then
+		local out, alguna = {}, false
+		for cat = 1, 30 do
+			local lista = try(C_TransmogCollection.GetCategoryAppearances, cat)
+			if type(lista) == "table" and #lista > 0 then
+				local tengo = {}
+				for _, a in ipairs(lista) do
+					local id = type(a) == "table" and num(a.visualID) or num(a)
+					if id and (type(a) ~= "table" or a.isCollected == true) then tengo[#tengo + 1] = id end
+				end
+				table.sort(tengo)
+				out[tostring(cat)] = { n = #lista, tengo = tengo }
+				alguna = true
+			end
+		end
+		if alguna then snap.transfiguraciones = out end
+	end
 end
 
 -- Talentos: especialización activa, el código de la configuración (el que se copia para compartir) y los nodos elegidos
@@ -491,7 +511,46 @@ R.ventana = function()
 	end
 end
 
-local ALL = { "identidad", "misiones", "hechizos", "profesiones", "bolsas", "equipo", "dinero", "monedas", "reputaciones", "colecciones", "talentos", "estadisticas" }
+-- Desde la 1.3.0 (diseno-addon-1.3.md, 6.2): idioma del cliente, versión del juego, modo de juego y la lista de addons del jugador
+-- (nombre, versión, activado; nunca su configuración: decisión del 2026-11-17).
+R.extra = function()
+	snap.idioma = str(try(GetLocale))
+	local version, build = try(GetBuildInfo)
+	snap.version, snap.build = str(version), tonumber(build)
+	snap.modo = C_GameRules and num(try(C_GameRules.GetActiveGameMode)) or NULL
+	local A = C_AddOns
+	if A and A.GetNumAddOns and A.GetAddOnInfo then
+		local out = {}
+		for i = 1, math.min(num(try(A.GetNumAddOns)) or 0, 300) do
+			local name = str(try(A.GetAddOnInfo, i))
+			if name then
+				local estado = A.GetAddOnEnableState and num(try(A.GetAddOnEnableState, name)) or NULL
+				out[#out + 1] = { name, str(try(A.GetAddOnMetadata, name, "Version")) or NULL, estado }
+			end
+		end
+		snap.addons = out
+	end
+end
+
+-- Toda la ventana de estadísticas del juego (6.2; comprobado en el juego que las tres funciones existen en Forever):
+-- por categoría, [número, nombre, valor]. En Forever no hay logros como tales (puntos de legado): no se tocan.
+R.estadisticasJuego = function()
+	local cats = try(GetStatisticsCategoryList)
+	if type(cats) ~= "table" then return end
+	local out = {}
+	for _, cat in ipairs(cats) do
+		local n = num(try(GetCategoryNumAchievements, cat)) or 0
+		local l = {}
+		for i = 1, math.min(n, 300) do
+			local id, nombre = try(GetAchievementInfo, cat, i)
+			if num(id) then l[#l + 1] = { id, str(nombre) or NULL, str(try(GetStatistic, id)) or NULL } end
+		end
+		out[tostring(cat)] = l
+	end
+	snap.estadisticasJuego = out
+end
+
+local ALL = { "identidad", "misiones", "hechizos", "profesiones", "bolsas", "equipo", "dinero", "monedas", "reputaciones", "colecciones", "talentos", "estadisticas", "extra", "estadisticasJuego" }
 
 -- ───────── montar y guardar el JSON ─────────
 local function build()
@@ -504,6 +563,12 @@ local function build()
 	d.correo = c.correo or NULL
 	d.mascotaCazador = c.mascota or NULL
 	d.recetasVentana = c.ventanas or {}
+	-- Desde la 1.3.0: la cronología del personaje (Mundo.lua, dato del jugador) y el resumen del recopilador (para Ajustes de la web).
+	d.cronologia = c.cronologia or {}
+	if FT.R then
+		d.recopilador = try(FT.R.resumen) or NULL
+		d.sesion = try(FT.R.sesion) or NULL
+	end
 	if next(errors) then d.errores = errors end
 	local buf = {}
 	encode(d, buf)
@@ -625,8 +690,11 @@ frame:SetScript("OnEvent", function(_, ev, arg1)
 end)
 
 -- ───────── /ft: qué se ha guardado ─────────
+-- Desde la 1.3.0 el addon no escribe en el chat (decisión del 2026-11-16): /ft abre un panel pequeño con el estado y una
+-- pestaña «Privacidad» con el interruptor de la base común (diseno-addon-1.3.md, 10.8). Las líneas se juntan y se enseñan ahí.
 local REGIONS = { [1] = "us", [2] = "kr", [3] = "eu", [4] = "tw" }
-local function say(text) print("|cffffd100Forever Tracker|r: " .. text) end
+local lineas = {}
+local function say(text) lineas[#lineas + 1] = text end
 local function count(t) return type(t) == "table" and #t or 0 end
 local function when(t) return t and date("%d/%m %H:%M", t) or "nunca" end
 local function money(c)
@@ -635,7 +703,8 @@ local function money(c)
 end
 
 local function report()
-	if not guid then say("todavía no sé quién eres; espera unos segundos y vuelve a escribir /ft."); return end
+	lineas = {}
+	if not guid then say("Todavía no sé quién eres: espera unos segundos y vuelve a escribir /ft."); return lineas end
 	local server, hex = guid:match("^Player%-(%d+)%-(%x+)$")
 	local region = REGIONS[snap.region or 0] or "?"
 	say(string.format("%s %s · nivel %s · número de la armería: %s-%s", snap.nombre or "?", snap.apellido or "", tostring(snap.nivel or "?"),
@@ -672,16 +741,91 @@ local function report()
 		say(string.format("jugadores que has visto: %d · de /quién: %d", n, q))
 		if FT.vistosDiag then say(FT.vistosDiag()) end
 	end
+	if FT.R and FT.R.resumen then
+		local r = try(FT.R.resumen)
+		if r then
+			say(string.format("base común: %s · lotes guardados %d (%d esperando al programa, %.1f MB) · en memoria %d",
+				r.interruptor and "aportando datos" or "APAGADO", r.lotes or 0, r.pendientes or 0, (r.bytes or 0) / 1048576, r.enMemoria or 0))
+			if r.encargos then say(string.format("encargos de la web (%s): %d fichas pedidas, %d lecturas locales%s", tostring(r.encargos.lista or r.lista or "?"),
+				r.encargos.hechas or 0, r.encargos.locales or 0, r.encargos.terminado and " · hecho" or " · en marcha")) end
+		end
+	end
 	local errs = {}
 	for k, v in pairs(errors) do errs[#errs + 1] = k .. ": " .. v end
 	if #errs > 0 then say("|cffff6060no se pudo leer|r " .. table.concat(errs, " · ")) end
-	say("el juego lo escribe en el archivo al cerrar sesión, al salir o con /reload. Después, súbelo en la web (Ajustes).")
+	say("El juego lo escribe en el archivo al cerrar sesión, al salir o con /reload; el programa de Windows lo sube solo.")
+	return lineas
+end
+FT.informe = report -- para las pruebas
+
+-- El panel (una ventana pequeña del juego). Si algo de la interfaz no existiera, no se enseña nada: nunca al chat.
+local panel
+local function construyePanel()
+	if panel or not UIParent then return panel end
+	local f = CreateFrame("Frame", "ForeverTrackerPanel", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+	f:SetSize(460, 280)
+	f:SetPoint("CENTER")
+	f:SetFrameStrata("DIALOG")
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", f.StartMoving)
+	f:SetScript("OnDragStop", f.StopMovingOrSizing)
+	if f.SetBackdrop then
+		f:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+	end
+	f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	f.title:SetPoint("TOP", 0, -16)
+	f.title:SetText("Forever Tracker " .. VERSION)
+	f.body = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	f.body:SetPoint("TOPLEFT", 20, -44)
+	f.body:SetPoint("BOTTOMRIGHT", -20, 50)
+	f.body:SetJustifyH("LEFT")
+	f.body:SetJustifyV("TOP")
+	f.body:SetWordWrap(true)
+	local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -4, -4)
+	f.tabEstado = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+	f.tabEstado:SetSize(100, 22)
+	f.tabEstado:SetPoint("BOTTOMLEFT", 16, 14)
+	f.tabEstado:SetText("Estado")
+	f.tabPriv = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+	f.tabPriv:SetSize(100, 22)
+	f.tabPriv:SetPoint("LEFT", f.tabEstado, "RIGHT", 6, 0)
+	f.tabPriv:SetText("Privacidad")
+	f.check = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+	f.check:SetPoint("TOPLEFT", 20, -120)
+	local etiqueta = f.check.Text or f.check.text
+	if etiqueta then etiqueta:SetText("Aportar datos del juego a la base común de Forever Tracker") end
+	f.check:SetScript("OnClick", function(self) if FT.R and FT.R.setInterruptor then FT.R.setInterruptor(self:GetChecked() and true or false) end end)
+	f.check:Hide()
+	f.tabEstado:SetScript("OnClick", function() f.check:Hide(); f.body:SetText(table.concat(lineas, "\n")) end)
+	f.tabPriv:SetScript("OnClick", function()
+		f.body:SetText("Lo que ves jugando (vendedores, misiones, botín, precios…) se junta de forma anónima con lo de los demás jugadores para la base de datos del juego de la web. "
+			.. "Nunca el chat, el correo ni nada de tu PC. Cómo funciona y cómo se apaga: política de privacidad de la web.\n\n\n\n"
+			.. "Tu progreso (lo que ves de tus personajes en la web) se sigue guardando igual.")
+		f.check:SetChecked(FT.R and FT.R.interruptor and FT.R.interruptor() or false)
+		f.check:Show()
+	end)
+	if UISpecialFrames then tinsert(UISpecialFrames, "ForeverTrackerPanel") end
+	panel = f
+	return f
+end
+local function abrePanel()
+	local ok = pcall(construyePanel)
+	if not ok or not panel then return end
+	panel.check:Hide()
+	panel.body:SetText(table.concat(lineas, "\n"))
+	panel:Show()
 end
 
 SLASH_FOREVERTRACKER1 = "/ft"
 SlashCmdList.FOREVERTRACKER = function()
-	if inCombat() then report(); return end
-	for _, p in ipairs(ALL) do dirty[p] = true end
-	run()
+	if not inCombat() then
+		for _, p in ipairs(ALL) do dirty[p] = true end
+		run()
+	end
 	report()
+	abrePanel()
 end

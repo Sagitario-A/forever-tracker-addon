@@ -205,6 +205,18 @@ namespace ForeverTracker
             BorraCarpeta(viejo);
         }
 
+        // Escribe Encargos.lua (lo que el programa baja de la web con GET /api/encargos) en la carpeta del addon: aparte y se cambia de
+        // golpe. El juego solo lee los archivos del addon al entrar o con /reload, así que se puede escribir con el juego abierto.
+        public static void EscribeEncargos(string juego, string lua)
+        {
+            string carpeta = CarpetaAddon(juego);
+            if (!Directory.Exists(carpeta)) throw new DirectoryNotFoundException("El addon no está instalado.");
+            string f = Path.Combine(carpeta, "Encargos.lua"), tmp = f + ".nuevo";
+            File.WriteAllText(tmp, lua, new UTF8Encoding(false));
+            if (File.Exists(f)) File.Replace(tmp, f, null);
+            else File.Move(tmp, f);
+        }
+
         static void BorraCarpeta(string d)
         {
             try { if (Directory.Exists(d)) Directory.Delete(d, true); } catch (Exception e) { Registro.Apunta("No se pudo borrar " + d + ": " + e.Message); }

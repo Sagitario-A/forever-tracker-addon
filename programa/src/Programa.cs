@@ -1,5 +1,6 @@
-// Forever Tracker para Windows. Programa sin ventana: sube solo el archivo del addon a la
-// web cada vez que el juego lo guarda y mantiene el addon al día. La ventana de estado sale al abrirlo desde el menú Inicio.
+// Forever Tracker para Windows. Programa sin ventana: sube solo el archivo del addon a la web cada vez que el juego lo guarda,
+// instala y mantiene el addon al día solo (desde la 1.1.0, sin preguntar) y escribe en el addon la lista de encargos que baja de
+// la web. La ventana de estado sale al abrirlo desde el menú Inicio; hasta que el PC está vinculado, lo que sale es la bienvenida.
 //
 // Forma de llamarlo:
 //   ForeverTracker.exe                 abrirlo (con la ventana de estado); si ya funciona, enseña su ventana
@@ -26,7 +27,7 @@ namespace ForeverTracker
 {
     public static class Programa
     {
-        public const string Version = "1.0.3";
+        public const string Version = "1.1.0";
         public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
 
         [STAThread]
@@ -85,7 +86,14 @@ namespace ForeverTracker
                 {
                     if (!creado)
                     {
-                        if (!fondo) Senal("mostrar", id); // ya funciona: que enseñe su ventana
+                        if (!fondo)
+                        {
+                            // Ya funciona: que enseñe su ventana. Esta copia la ha abierto el usuario (menú Inicio), así que tiene derecho a
+                            // ponerse delante; se lo cede a la que funciona, que si no, Windows le deja la ventana detrás.
+                            try { foreach (var p in System.Diagnostics.Process.GetProcessesByName("ForeverTracker")) if (p.Id != System.Diagnostics.Process.GetCurrentProcess().Id) AllowSetForegroundWindow(p.Id); }
+                            catch { }
+                            Senal("mostrar", id);
+                        }
                         return;
                     }
                     var aj = Ajustes.Carga(datos);
@@ -106,9 +114,11 @@ namespace ForeverTracker
             catch (Exception e)
             {
                 Registro.Apunta("Error grave: " + e);
-                if (!fondo) MessageBox.Show("Forever Tracker ha tenido un problema:\n\n" + e.Message, "Forever Tracker", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (!fondo) Dialogo.Avisa(null, "Forever Tracker ha tenido un problema:\n\n" + e.Message);
             }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
 
         // Un nombre corto y fijo para cada carpeta de datos: así el de pruebas y el de verdad no se pisan.
         static string IdDe(string datos)
@@ -167,12 +177,16 @@ namespace ForeverTracker
         {
             if (v == null || v.IsDisposed)
             {
-                v = new Ventana(ag, Termina);
+                v = new Ventana(ag);
                 v.FormClosed += (s, e) => { v = null; Agente.Recorta(); };
             }
             v.Show();
             if (v.WindowState == FormWindowState.Minimized) v.WindowState = FormWindowState.Normal;
             v.Activate();
+            // Windows no deja a un programa que no está delante ponerse delante (al abrirlo desde el menú Inicio estando ya en
+            // marcha, o recién instalado): ponerla un instante por encima de todo sí lo permite.
+            v.TopMost = true;
+            v.TopMost = false;
         }
 
         void Termina()

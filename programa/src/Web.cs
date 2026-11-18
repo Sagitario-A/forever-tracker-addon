@@ -125,6 +125,10 @@ namespace ForeverTracker
         {
             object v; return d != null && d.TryGetValue(k, out v) ? v as string : null;
         }
+        public static bool Si(Dictionary<string, object> d, string k)
+        {
+            object v; return d != null && d.TryGetValue(k, out v) && v is bool && (bool)v;
+        }
         public static long Num(Dictionary<string, object> d, string k)
         {
             object v;
