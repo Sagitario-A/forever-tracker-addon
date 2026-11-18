@@ -19,17 +19,23 @@ namespace ForeverTracker
         const string Nombre = "ForeverTracker";
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        static extern int GetCurrentPackageFullName(ref int length, StringBuilder name);
+        static extern int GetCurrentPackageFamilyName(ref int length, StringBuilder name);
         [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
         const int ASFW_ANY = -1;
 
-        // ¿Va dentro del paquete de la Store?
+        // ¿Va dentro de NUESTRO paquete de la Store? Se mira la familia del paquete, no solo si hay alguno: cuando Configuración →
+        // Aplicaciones lanza un desinstalador lo hace a través de un intermediario que sí es un paquete, y el programa heredaba esa
+        // identidad, se creía el de la Store y con --desinstalar se cerraba sin hacer nada (visto el 2026-11-18).
         public static bool EsPaquete()
         {
             try
             {
                 int len = 0;
-                return GetCurrentPackageFullName(ref len, null) != 15700; // 15700 = APPMODEL_ERROR_NO_PACKAGE
+                int r = GetCurrentPackageFamilyName(ref len, null);
+                if (r == 15700) return false; // APPMODEL_ERROR_NO_PACKAGE
+                var sb = new StringBuilder(len + 1);
+                if (GetCurrentPackageFamilyName(ref len, sb) != 0) return false;
+                return string.Equals(sb.ToString(), PaqueteFamilia, StringComparison.OrdinalIgnoreCase);
             }
             catch { return false; } // Windows sin paquetes
         }
@@ -112,14 +118,23 @@ namespace ForeverTracker
         }
 
         // Desinstalar (desde «Aplicaciones instaladas»): cierra el que esté funcionando, desvincula el PC en la web, borra
-        // el arranque con Windows, el acceso, la entrada, los datos y la carpeta del programa. El addon del juego se queda.
+        // el arranque con Windows, el acceso, la entrada, los datos, la carpeta del programa y el addon del juego (desde la 1.1.2).
         public static void Desinstala(string datos, string idDatos, Func<bool> desvincula)
         {
-            if (!Dialogo.Pregunta(null, "¿Desinstalar Forever Tracker?\n\nEste PC se desvinculará de tu cuenta de la web. El addon del juego se queda: si quieres, bórralo de Interface\\AddOns.",
+            // Se apunta antes de nada: así se sabe si quien pidió desinstalar (Configuración, el panel clásico) llegó a lanzarlo.
+            Registro.Apunta("Desinstalar pedido (desde " + (Environment.GetEnvironmentVariable("__COMPAT_LAYER") ?? "-") + "; padre con sesión interactiva: " + Environment.UserInteractive + ").");
+            if (!Dialogo.Pregunta(null, "¿Desinstalar Forever Tracker?\n\nEste PC se desvinculará de tu cuenta de la web y se quitará también el addon del juego (Interface\\AddOns\\ForeverTracker). Lo que el juego guardó de tus personajes no se toca.",
                 "Desinstalar", "Cancelar")) return;
             Programa.Senal("salir", idDatos);
             Thread.Sleep(1500);
             try { desvincula(); } catch { }
+            // El addon del juego también se quita (decidido el 2026-11-18); lo guardado por el juego en WTF se queda.
+            try
+            {
+                var aj = Ajustes.Carga(datos);
+                if (aj.Juego != null && Directory.Exists(Juego.CarpetaAddon(aj.Juego))) { Directory.Delete(Juego.CarpetaAddon(aj.Juego), true); Registro.Apunta("Addon quitado de " + Juego.CarpetaAddon(aj.Juego)); }
+            }
+            catch (Exception e) { Registro.Apunta("No se pudo quitar el addon: " + e.Message); }
             ArranqueConWindows(false);
             try { File.Delete(Acceso); } catch { }
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
@@ -127,7 +142,7 @@ namespace ForeverTracker
             // El .exe no se puede borrar a sí mismo mientras funciona: lo borra un momento después la consola de Windows.
             try
             {
-                Process.Start(new ProcessStartInfo("cmd.exe", "/c timeout /t 3 /nobreak >nul & rmdir /s /q \"" + CarpetaPrograma + "\"")
+                Process.Start(new ProcessStartInfo("cmd.exe", BorradoAplazado(CarpetaPrograma))
                 { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             }
             catch { }
@@ -206,7 +221,7 @@ namespace ForeverTracker
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
             try
             {
-                Process.Start(new ProcessStartInfo("cmd.exe", "/c timeout /t 3 /nobreak >nul & rmdir /s /q \"" + CarpetaPrograma + "\"")
+                Process.Start(new ProcessStartInfo("cmd.exe", BorradoAplazado(CarpetaPrograma))
                 { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             }
             catch { }
@@ -220,6 +235,13 @@ namespace ForeverTracker
             { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             p.WaitForExit(120000);
             return !HayPaquete();
+        }
+
+        // El .exe no se puede borrar mientras funciona (y sigue funcionando mientras se lee el aviso de «desinstalado»): la consola de
+        // Windows lo intenta cada 2 segundos hasta un minuto, hasta que la carpeta desaparece (visto el 2026-11-18: quedaba el .exe).
+        static string BorradoAplazado(string carpeta)
+        {
+            return "/c for /l %i in (1,1,30) do (timeout /t 2 /nobreak >nul & rmdir /s /q \"" + carpeta + "\" 2>nul & if not exist \"" + carpeta + "\" exit)";
         }
 
         // ───────── arrancar con Windows (descarga directa: valor «ForeverTracker» de Run del usuario) ─────────

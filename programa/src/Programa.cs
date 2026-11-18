@@ -27,7 +27,7 @@ namespace ForeverTracker
 {
     public static class Programa
     {
-        public const string Version = "1.1.1";
+        public const string Version = "1.1.2";
         public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
 
         [STAThread]
