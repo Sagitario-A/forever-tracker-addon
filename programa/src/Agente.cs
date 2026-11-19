@@ -274,8 +274,9 @@ namespace ForeverTracker
                           + J.Num(rec, "descartados") + " descartados, " + J.Num(rec, "errores") + " con error" + (J.Si(rec, "recoger") ? "" : " (el interruptor de la cuenta está apagado)") + ".");
                 A.Guarda();
                 Avisa();
-                // Con la subida hecha, la web ya tiene esos lotes: se vuelve a escribir Encargos.lua con «recibidos» al día.
-                await BajaEncargos();
+                // Con la subida hecha, la web ya tiene esos lotes: se vuelve a escribir Encargos.lua con «recibidos» al día. Solo si
+                // guardó alguno nuevo (desde la 1.1.3): si todo eran repetidos, «recibidos» no cambia (antes se escribía dos veces al vincular).
+                if (rec != null && J.Num(rec, "guardados") > 0) await BajaEncargos(true);
                 return;
             }
             else if (r.Anulado)
@@ -476,11 +477,13 @@ namespace ForeverTracker
         // La lista de encargos de la cuenta (GET /api/encargos, con la clave; trae «lua», el archivo entero) se escribe en
         // Interface\AddOns\ForeverTracker\Encargos.lua: al arrancar, cada hora, después de instalar o poner al día el addon (la
         // actualización pisa ese archivo con el de por defecto) y después de cada subida que vaya bien (así «recibidos» está al día y
-        // el addon borra del archivo los lotes que la web ya tiene). Solo con el PC vinculado y el addon en su carpeta.
-        public async Task BajaEncargos()
+        // el addon borra del archivo los lotes que la web ya tiene; desde la 1.1.3 solo si guardó lotes nuevos). Solo con el PC vinculado y el
+        // addon en su carpeta.
+        public async Task BajaEncargos(bool trasSubida = false)
         {
             if (clave == null || A.Juego == null || !Directory.Exists(Juego.CarpetaAddon(A.Juego))) return;
-            if (bajandoEncargos) { encargosOtraVez = true; return; } // ya hay una en marcha: se repite al acabar
+            // Ya hay una en marcha: solo se repite al acabar si la pide una subida (la lista pudo cambiar); si no, con la que va basta.
+            if (bajandoEncargos) { if (trasSubida) encargosOtraVez = true; return; }
             bajandoEncargos = true;
             try
             {
