@@ -13,7 +13,7 @@
 local ADDON, FT = ...
 
 local FORMATO = 1
-local VERSION = "1.3.2"
+local VERSION = "1.3.3"
 do
 	local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 	local ok, v = pcall(get, ADDON, "Version")
@@ -43,6 +43,19 @@ local function usable(v)
 	return true
 end
 local function num(v) if usable(v) and type(v) == "number" then return v end end
+-- Apariencias (1.3.3): la ventana de apariencias de Forever pone sola el filtro «no enseñar las que no tienes» en la categoría que
+-- tiene elegida, y dura hasta salir del juego (un /reload no lo quita). Desde ese momento GetCategoryAppearances de esa categoría
+-- devuelve solo las que tienes (visto en el juego el 2026-11-19: escudos, 118 al entrar y 18 tras abrir la ventana), mientras que
+-- GetCategoryTotal sigue dando el total (118). Una lista está recortada si el juego dice que hay más y todo lo que trae lo tienes.
+-- Devuelve si está recortada y el total que da el juego. Lo usan el progreso (este archivo) y la foto del recopilador (Mundo.lua).
+function FT.listaRecortada(cat, lista)
+	local total = C_TransmogCollection and num(try(C_TransmogCollection.GetCategoryTotal, cat))
+	if not total or total <= #lista then return false, total end
+	for _, a in ipairs(lista) do
+		if type(a) ~= "table" or a.isCollected ~= true then return false, total end
+	end
+	return true, total
+end
 local function str(v) if usable(v) and type(v) == "string" then return v end end
 local function inCombat()
 	return (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) or false
@@ -332,7 +345,9 @@ R.colecciones = function()
 					if id and (type(a) ~= "table" or a.isCollected == true) then tengo[#tengo + 1] = id end
 				end
 				table.sort(tengo)
-				out[tostring(cat)] = { n = #lista, tengo = tengo }
+				-- 1.3.3: si la ventana de apariencias ha recortado la lista de esta categoría, «n» es el total que da el juego.
+				local recortada, total = FT.listaRecortada(cat, lista)
+				out[tostring(cat)] = { n = recortada and total or #lista, tengo = tengo }
 				alguna = true
 			end
 		end

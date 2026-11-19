@@ -710,6 +710,9 @@ local function apariencias(cat)
 	if not (C_TransmogCollection and C_TransmogCollection.GetCategoryAppearances) then return end
 	local lista = try(C_TransmogCollection.GetCategoryAppearances, cat)
 	if type(lista) ~= "table" or #lista == 0 then return end
+	-- 1.3.3: si la ventana de apariencias ha recortado esta categoría a «solo las que tienes» (pasa tras abrirla y hacer /reload), no
+	-- se manda la foto: sería una lista incompleta. Se hará en la siguiente entrada limpia al juego.
+	if FT.listaRecortada and FT.listaRecortada(cat, lista) then return end
 	local ids, fuentes = {}, {}
 	for _, a in ipairs(lista) do
 		local id = type(a) == "table" and num(a.visualID) or num(a)
