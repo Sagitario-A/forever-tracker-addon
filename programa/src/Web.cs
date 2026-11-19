@@ -7,7 +7,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
 
 namespace ForeverTracker
 {
@@ -47,7 +46,9 @@ namespace ForeverTracker
         public Web(string baseUrl)
         {
             Base = baseUrl.TrimEnd('/');
-            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+#if !NET
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; // .NET Framework 4.8 (Windows); el de Mac ya va con TLS 1.2
+#endif
             http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(60);
             http.DefaultRequestHeaders.UserAgent.ParseAdd("ForeverTracker-Programa/" + Programa.Version);
@@ -69,7 +70,7 @@ namespace ForeverTracker
                     {
                         r.Estado = (int)res.StatusCode;
                         string texto = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        try { r.Json = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(texto); } catch { }
+                        try { r.Json = Json.Objeto(texto); } catch { }
                     }
                 }
             }
@@ -88,7 +89,7 @@ namespace ForeverTracker
 
         public Task<Respuesta> PostJson(string ruta, object cuerpo)
         {
-            var c = new StringContent(new JavaScriptSerializer().Serialize(cuerpo), Encoding.UTF8, "application/json");
+            var c = new StringContent(Json.Escribe(cuerpo), Encoding.UTF8, "application/json");
             return Envia(HttpMethod.Post, ruta, null, c);
         }
 
@@ -114,7 +115,7 @@ namespace ForeverTracker
         }
     }
 
-    // Leer números y textos de un JSON ya convertido (JavaScriptSerializer da int, long, decimal…).
+    // Leer números y textos de un JSON ya convertido (Json.Lee da long o double; los ajustes viejos, lo mismo).
     public static class J
     {
         public static Dictionary<string, object> Obj(Dictionary<string, object> d, string k)

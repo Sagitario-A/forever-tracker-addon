@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -405,7 +404,7 @@ namespace ForeverTracker
         {
             if (url == null || !(url.StartsWith("https://") || url.StartsWith("http://127.0.0.1") || url.StartsWith("http://localhost"))) return;
             if (Environment.GetEnvironmentVariable("FT_SIN_NAVEGADOR") == "1") return; // pruebas automáticas
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch (Exception e) { Registro.Apunta("No se pudo abrir el navegador: " + e.Message); }
+            try { Plataforma.AbreNavegador(url); } catch (Exception e) { Registro.Apunta("No se pudo abrir el navegador: " + e.Message); }
         }
 
         // ───────── el addon ─────────
@@ -426,7 +425,7 @@ namespace ForeverTracker
             }
             if (Aviso != null && Aviso.StartsWith("No se puede hablar")) Aviso = null;
             infoAddon = J.Obj(r.Json, "addon");
-            programaInfo = J.Obj(r.Json, "programa");
+            programaInfo = Plataforma.InfoPrograma(r.Json);
             AddonUltimo = J.Txt(infoAddon, "version");
             AddonInstalado = A.Juego == null ? null : Juego.VersionAddon(A.Juego);
             if (A.Juego == null || AddonUltimo == null || !PuedeAddon) { Avisa(); return true; }
@@ -520,32 +519,25 @@ namespace ForeverTracker
             finally { bajandoEncargos = false; Avisa(); }
         }
 
-        // ───────── el programa (solo la descarga directa; el de la Store lo pone al día la Store) ─────────
+        // ───────── el programa (la descarga directa de Windows y el de Mac; el de la Store lo pone al día la Store) ─────────
         Dictionary<string, object> programaInfo;
 
         async Task RevisaPrograma()
         {
-            if (programaInfo == null || Instalacion.EsPaquete() || (Pruebas && !A.ProbarActualizacion)) return;
+            if (programaInfo == null || !Plataforma.PuedeActualizarse || (Pruebas && !A.ProbarActualizacion)) return;
             string v = J.Txt(programaInfo, "version");
             if (v == null || Versiones.Compara(v, Programa.Version) <= 0) return;
             ProgramaNuevo = v; Avisa();
-            byte[] exe = await W.Descarga(J.Txt(programaInfo, "url"));
+            byte[] archivo = await W.Descarga(J.Txt(programaInfo, "url"));
             string huella = null;
-            if (exe != null) using (var h = SHA256.Create()) huella = Clave.Hex(h.ComputeHash(exe));
-            if (exe == null || huella != J.Txt(programaInfo, "sha256")) { Registro.Apunta("La versión nueva del programa no se pudo descargar bien."); return; }
-            string dir = Path.Combine(Datos, "actualizacion");
-            Directory.CreateDirectory(dir);
-            string f = Path.Combine(dir, "ForeverTracker-" + v + ".exe");
-            File.WriteAllBytes(f, exe);
-            Registro.Apunta("Programa " + v + " descargado: se instala.");
-            // El nuevo se instala solo (--actualizar): cierra este, se copia en su sitio y arranca.
-            Process.Start(new ProcessStartInfo(f, Pruebas ? "--actualizar --pruebas \"" + Datos + "\"" : "--actualizar") { UseShellExecute = false });
+            if (archivo != null) using (var h = SHA256.Create()) huella = Clave.Hex(h.ComputeHash(archivo));
+            if (archivo == null || huella != J.Txt(programaInfo, "sha256")) { Registro.Apunta("La versión nueva del programa no se pudo descargar bien."); return; }
+            try { Plataforma.InstalaActualizacion(archivo, v, Datos, Pruebas); }
+            catch (Exception e) { Registro.Apunta("No se pudo instalar la versión nueva: " + e.Message); }
         }
 
         // ───────── memoria ─────────
-        [DllImport("psapi.dll")] static extern bool EmptyWorkingSet(IntPtr proceso);
-
-        // Tras cada subida, se devuelve a Windows la memoria que no se usa (el programa se queda en poco más de nada).
+        // Tras cada subida, se devuelve al sistema la memoria que no se usa (el programa se queda en poco más de nada).
         public static void Recorta()
         {
             try
@@ -553,7 +545,7 @@ namespace ForeverTracker
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
-                EmptyWorkingSet(Process.GetCurrentProcess().Handle);
+                Plataforma.Recorta();
             }
             catch { }
         }

@@ -6,7 +6,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Win32;
 
 namespace ForeverTracker
 {
@@ -33,62 +32,21 @@ namespace ForeverTracker
             return null;
         }
 
-        // Una carpeta de juego tiene Interface, WTF o un .exe.
+        // Una carpeta de juego tiene Interface, WTF, un .exe (Windows) o un .app (Mac).
         static bool Parece(string f)
         {
             try
             {
-                return Directory.Exists(Path.Combine(f, "WTF")) || Directory.Exists(Path.Combine(f, "Interface")) || Directory.GetFiles(f, "*.exe").Length > 0;
+                return Directory.Exists(Path.Combine(f, "WTF")) || Directory.Exists(Path.Combine(f, "Interface")) || Directory.GetFiles(f, "*.exe").Length > 0
+                    || Directory.GetDirectories(f, "*.app").Length > 0;
             }
             catch { return false; }
         }
 
-        // Busca el juego: Battle.net (product.db), el registro de Windows y las carpetas de siempre en cada disco.
+        // Busca el juego donde diga la plataforma (Windows: Battle.net, el registro y las carpetas de siempre; Mac: Aplicaciones y Battle.net).
         public static string Busca()
         {
-            var candidatas = new List<string>();
-            try
-            {
-                string db = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Battle.net", "Agent", "product.db");
-                if (File.Exists(db))
-                {
-                    // product.db es un formato binario de Blizzard; basta con sacar los textos que parecen carpetas.
-                    string t = Encoding.UTF8.GetString(File.ReadAllBytes(db));
-                    foreach (Match m in Regex.Matches(t, @"[A-Za-z]:[\\/][^\x00-\x1f""<>|?*]{1,200}"))
-                        candidatas.Add(m.Value.Replace('/', '\\'));
-                }
-            }
-            catch (Exception e) { Registro.Apunta("product.db: " + e.Message); }
-            foreach (var vista in new[] { RegistryView.Registry32, RegistryView.Registry64 })
-            {
-                try
-                {
-                    using (var hk = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, vista))
-                    {
-                        using (var k = hk.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\World of Warcraft"))
-                            if (k != null) candidatas.Add(k.GetValue("InstallLocation") as string);
-                        using (var k = hk.OpenSubKey(@"SOFTWARE\Blizzard Entertainment\World of Warcraft"))
-                            if (k != null) candidatas.Add(k.GetValue("InstallPath") as string);
-                    }
-                }
-                catch { }
-            }
-            foreach (var disco in DriveInfo.GetDrives())
-            {
-                try
-                {
-                    if (disco.DriveType != DriveType.Fixed || !disco.IsReady) continue;
-                    string r = disco.RootDirectory.FullName;
-                    candidatas.Add(Path.Combine(r, @"Program Files (x86)\World of Warcraft"));
-                    candidatas.Add(Path.Combine(r, @"Program Files\World of Warcraft"));
-                    candidatas.Add(Path.Combine(r, "World of Warcraft"));
-                    candidatas.Add(Path.Combine(r, @"Games\World of Warcraft"));
-                    candidatas.Add(Path.Combine(r, @"Juegos\World of Warcraft"));
-                    candidatas.Add(Path.Combine(r, @"Battle.net\World of Warcraft"));
-                }
-                catch { }
-            }
-            foreach (string c in candidatas)
+            foreach (string c in Plataforma.CandidatasJuego())
             {
                 if (string.IsNullOrWhiteSpace(c)) continue;
                 string v = Valida(c);
@@ -106,7 +64,7 @@ namespace ForeverTracker
             if (sv == null || !Path.GetFileName(sv).Equals("SavedVariables", StringComparison.OrdinalIgnoreCase)) return false;
             string cuenta = Path.GetDirectoryName(sv);
             string account = cuenta == null ? null : Path.GetDirectoryName(cuenta);
-            return account != null && string.Equals(Path.GetFullPath(account).TrimEnd('\\'), Path.GetFullPath(Path.Combine(juego, "WTF", "Account")).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+            return account != null && string.Equals(Path.GetFullPath(account).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(Path.Combine(juego, "WTF", "Account")).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
         }
 
         public static List<string> ArchivosAddon(string juego)
@@ -189,7 +147,7 @@ namespace ForeverTracker
                     if (!e.FullName.StartsWith("ForeverTracker/", StringComparison.Ordinal) || e.FullName.EndsWith("/")) continue;
                     string rel = e.FullName.Substring("ForeverTracker/".Length);
                     if (rel.Contains("..") || rel.Contains(":") || rel.StartsWith("/") || rel.StartsWith("\\")) throw new InvalidDataException("Ruta rara en el .zip: " + e.FullName);
-                    string f = Path.Combine(nuevo, rel.Replace('/', '\\'));
+                    string f = Path.Combine(nuevo, rel.Replace('/', Path.DirectorySeparatorChar));
                     Directory.CreateDirectory(Path.GetDirectoryName(f));
                     e.ExtractToFile(f, true);
                 }

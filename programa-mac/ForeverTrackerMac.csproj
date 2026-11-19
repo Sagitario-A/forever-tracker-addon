@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Forever Tracker para Mac (desde la 1.1.4). La lógica (agente, web, juego, ajustes, JSON) es la misma que la del programa de
+       Windows: se compilan los mismos archivos de ../programa/src; aquí solo está la «caja» de Mac (ventana con Avalonia, instalación,
+       arranque con el sistema, actualización del paquete .app). Se compila desde Windows: dotnet publish -r osx-arm64 (o osx-x64).
+       Para probarlo sin un Mac, también se ejecuta en Windows (dotnet run), con la misma lógica. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>ForeverTracker</AssemblyName>
+    <RootNamespace>ForeverTracker</RootNamespace>
+    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
+    <Version>1.1.4</Version>
+    <AssemblyVersion>1.1.4.0</AssemblyVersion>
+    <FileVersion>1.1.4.0</FileVersion>
+    <Product>Forever Tracker</Product>
+    <AssemblyTitle>Forever Tracker</AssemblyTitle>
+    <Company>Forever Tracker</Company>
+    <Copyright>© 2026 Kiko Gabana</Copyright>
+    <Description>Forever Tracker: sube tus datos de World of Warcraft: Forever a la web y mantiene su addon al día</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <NoWarn>CS0618;SYSLIB0014</NoWarn>
+    <ApplicationIcon>..\programa\icono.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\programa\src\Agente.cs" Link="compartido\Agente.cs" />
+    <Compile Include="..\programa\src\Web.cs" Link="compartido\Web.cs" />
+    <Compile Include="..\programa\src\Juego.cs" Link="compartido\Juego.cs" />
+    <Compile Include="..\programa\src\Ajustes.cs" Link="compartido\Ajustes.cs" />
+    <Compile Include="..\programa\src\Json.cs" Link="compartido\Json.cs" />
+    <Compile Include="..\programa\src\Identidad.cs" Link="compartido\Identidad.cs" />
+    <EmbeddedResource Include="icono.png" LogicalName="icono.png" Condition="Exists('icono.png')" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
+  </ItemGroup>
+</Project>

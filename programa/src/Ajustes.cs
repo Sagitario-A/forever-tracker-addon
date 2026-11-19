@@ -1,11 +1,11 @@
 // Ajustes del programa, la clave cifrada y el registro de lo que pasa. Todo en la carpeta de datos del usuario
-// (%LOCALAPPDATA%\ForeverTracker, o la de --pruebas). C# 5 (el compilador que trae Windows): sin $"", ?. ni nameof.
+// (%LOCALAPPDATA%\ForeverTracker en Windows, ~/Library/Application Support/ForeverTracker en Mac, o la de --pruebas). C# 5 (el
+// compilador que trae Windows): sin $"", ?. ni nameof. Desde la 1.1.4 se compila también en el programa de Mac.
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using System.Web.Script.Serialization;
 
 namespace ForeverTracker
 {
@@ -30,7 +30,7 @@ namespace ForeverTracker
         public Dictionary<string, string> Huellas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, Subida> Subidas = new Dictionary<string, Subida>(StringComparer.OrdinalIgnoreCase);
 
-        [ScriptIgnore] public string Archivo;
+        public string Archivo;
 
         public static Ajustes Carga(string carpeta)
         {
@@ -38,7 +38,7 @@ namespace ForeverTracker
             Ajustes a = null;
             try
             {
-                if (File.Exists(f)) a = new JavaScriptSerializer().Deserialize<Ajustes>(File.ReadAllText(f, Encoding.UTF8));
+                if (File.Exists(f)) a = Desde(Json.Objeto(File.ReadAllText(f, Encoding.UTF8)));
             }
             catch (Exception e) { Registro.Apunta("Ajustes ilegibles, se empiezan de nuevo: " + e.Message); }
             if (a == null) a = new Ajustes();
@@ -50,6 +50,36 @@ namespace ForeverTracker
             return a;
         }
 
+        // Los mismos nombres de campo que escribía la 1.0.0 (un ajustes.json viejo se lee igual).
+        Dictionary<string, object> Hacia()
+        {
+            var subidas = new Dictionary<string, object>();
+            foreach (var kv in Subidas)
+                subidas[kv.Key] = new Dictionary<string, object> { { "Cuando", kv.Value.Cuando }, { "Bien", kv.Value.Bien }, { "Resumen", kv.Value.Resumen } };
+            return new Dictionary<string, object> {
+                { "Juego", Juego }, { "Web", Web }, { "Cuenta", Cuenta }, { "ProbarActualizacion", ProbarActualizacion },
+                { "CapturaCarpeta", CapturaCarpeta }, { "InicioDecidido", InicioDecidido },
+                { "Huellas", new Dictionary<string, string>(Huellas) }, { "Subidas", subidas } };
+        }
+
+        static Ajustes Desde(Dictionary<string, object> d)
+        {
+            if (d == null) return null;
+            var a = new Ajustes();
+            a.Juego = J.Txt(d, "Juego"); a.Web = J.Txt(d, "Web"); a.Cuenta = J.Txt(d, "Cuenta");
+            a.ProbarActualizacion = J.Si(d, "ProbarActualizacion"); a.CapturaCarpeta = J.Txt(d, "CapturaCarpeta"); a.InicioDecidido = J.Si(d, "InicioDecidido");
+            var h = J.Obj(d, "Huellas");
+            if (h != null) foreach (var kv in h) if (kv.Value is string) a.Huellas[kv.Key] = (string)kv.Value;
+            var s = J.Obj(d, "Subidas");
+            if (s != null)
+                foreach (var kv in s)
+                {
+                    var x = kv.Value as Dictionary<string, object>;
+                    if (x != null) a.Subidas[kv.Key] = new Subida { Cuando = J.Num(x, "Cuando"), Bien = J.Si(x, "Bien"), Resumen = J.Txt(x, "Resumen") };
+                }
+            return a;
+        }
+
         public void Guarda()
         {
             lock (this)
@@ -57,7 +87,7 @@ namespace ForeverTracker
                 try
                 {
                     string tmp = Archivo + ".nuevo";
-                    File.WriteAllText(tmp, new JavaScriptSerializer().Serialize(this), new UTF8Encoding(false));
+                    File.WriteAllText(tmp, Json.Escribe(Hacia()), new UTF8Encoding(false));
                     if (File.Exists(Archivo)) File.Replace(tmp, Archivo, null);
                     else File.Move(tmp, Archivo);
                 }
@@ -66,12 +96,10 @@ namespace ForeverTracker
         }
     }
 
-    // La clave del PC: la crea el programa (32 bytes al azar) y se guarda cifrada con Windows (DPAPI, solo para este usuario
-    // en este PC). La web solo conoce su huella.
+    // La clave del PC: la crea el programa (32 bytes al azar) y se guarda protegida como diga la plataforma (en Windows cifrada con
+    // DPAPI, solo para este usuario en este PC; en Mac, solo legible por el usuario). La web solo conoce su huella.
     public static class Clave
     {
-        static readonly byte[] Extra = Encoding.ASCII.GetBytes("ForeverTracker-clave-1");
-
         public static string Nueva()
         {
             byte[] b = new byte[32];
@@ -97,7 +125,7 @@ namespace ForeverTracker
             try
             {
                 if (!File.Exists(f)) return null;
-                byte[] b = ProtectedData.Unprotect(File.ReadAllBytes(f), Extra, DataProtectionScope.CurrentUser);
+                byte[] b = Plataforma.DesprotegeClave(File.ReadAllBytes(f));
                 string k = Encoding.ASCII.GetString(b);
                 return k.Length == 43 ? k : null;
             }
@@ -107,7 +135,7 @@ namespace ForeverTracker
         public static void Guarda(string carpeta, string clave)
         {
             string f = Path.Combine(carpeta, "clave.bin");
-            File.WriteAllBytes(f, ProtectedData.Protect(Encoding.ASCII.GetBytes(clave), Extra, DataProtectionScope.CurrentUser));
+            File.WriteAllBytes(f, Plataforma.ProtegeClave(Encoding.ASCII.GetBytes(clave)));
         }
 
         public static void Borra(string carpeta)

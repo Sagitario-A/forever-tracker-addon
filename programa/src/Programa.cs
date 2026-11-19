@@ -25,10 +25,8 @@ using System.Windows.Forms;
 
 namespace ForeverTracker
 {
-    public static class Programa
+    public static partial class Programa
     {
-        public const string Version = "1.1.3";
-        public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
 
         [STAThread]
         static void Main(string[] args)
