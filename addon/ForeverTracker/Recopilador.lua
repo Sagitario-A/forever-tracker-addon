@@ -16,7 +16,7 @@ local R = {}
 FT.R = R
 
 local FORMATO_LOTE = 1
-local VERSION = "0.1.0"
+local VERSION = "1.3.2"
 do
 	local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
 	local ok, v = pcall(get, ADDON, "Version")
