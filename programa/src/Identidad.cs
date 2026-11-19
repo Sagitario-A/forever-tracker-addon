@@ -4,7 +4,7 @@ namespace ForeverTracker
 {
     public static partial class Programa
     {
-        public const string Version = "1.1.4";
+        public const string Version = "1.1.5";
         public const string WebReal = "https://forever-tracker.kikoernk.workers.dev";
     }
 }

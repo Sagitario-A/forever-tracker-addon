@@ -15,16 +15,20 @@ namespace ForeverTracker
         const string Etiqueta = "app.forevertracker.programa";
         public static string CarpetaPruebas; // modo de pruebas: el programa «instalado» va en <carpeta>/programa
 
-        // El paquete .app que contiene este ejecutable (…/Forever Tracker.app/Contents/MacOS/ForeverTracker), o null si no va en uno.
+        // El paquete .app que se descarga y se instala, o null si este ejecutable no va en uno. Desde la 1.1.5 el paquete es universal:
+        // «Forever Tracker.app/Contents/MacOS/ForeverTracker» es un lanzador pequeño para los dos chips, y el programa de verdad va dentro,
+        // en «Contents/Helpers/<arm64|x64>/Forever Tracker.app» (programa-mac/lanzador/lanzador.c). Por eso se busca el .app más exterior:
+        // ese es el que se copia a Aplicaciones, el que arranca con el sistema y el que se cambia al actualizar.
         public static string RutaApp
         {
             get
             {
                 try
                 {
-                    var d = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd('/', '\\'));
-                    if (d.Name == "MacOS" && d.Parent != null && d.Parent.Name == "Contents" && d.Parent.Parent != null && d.Parent.Parent.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
-                        return d.Parent.Parent.FullName;
+                    string app = null;
+                    for (var d = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd('/', '\\')); d != null; d = d.Parent)
+                        if (d.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(d.FullName, "Contents", "MacOS"))) app = d.FullName;
+                    return app;
                 }
                 catch { }
                 return null;
@@ -51,7 +55,7 @@ namespace ForeverTracker
             Borra(nuevo); Borra(viejo);
             Directory.CreateDirectory(Path.GetDirectoryName(destino));
             CopiaCarpeta(origen, nuevo);
-            Plataforma.HazEjecutable(Ejecutable(nuevo));
+            Plataforma.HazEjecutables(nuevo);
             if (Directory.Exists(destino)) Directory.Move(destino, viejo);
             try { Directory.Move(nuevo, destino); }
             catch { if (Directory.Exists(viejo) && !Directory.Exists(destino)) Directory.Move(viejo, destino); throw; }
@@ -109,7 +113,7 @@ namespace ForeverTracker
             string nuevo = null;
             foreach (string d in Directory.GetDirectories(dir)) if (d.EndsWith(".app", StringComparison.OrdinalIgnoreCase)) nuevo = d;
             if (nuevo == null) throw new InvalidDataException("El .zip no trae el paquete .app");
-            Plataforma.HazEjecutable(Ejecutable(nuevo));
+            Plataforma.HazEjecutables(nuevo);
             Registro.Apunta("Programa " + version + " descargado: se instala.");
             if (!Plataforma.EsMac) { Registro.Apunta("(En Windows solo se comprueba la descarga: el paquete de Mac no se instala.)"); return; }
             if (pruebas) CarpetaPruebas = datos;
@@ -164,7 +168,7 @@ namespace ForeverTracker
             catch (Exception e) { Registro.Apunta("No se pudo cambiar el arranque con el sistema: " + e.Message); }
         }
 
-        // Desinstalar (desde el menú del programa): cierra el que esté funcionando, desvincula el PC en la web, quita el addon del
+        // Desinstalar (botón «Desinstalar…» de la ventana): cierra el que esté funcionando, desvincula el PC en la web, quita el addon del
         // juego, el arranque con el sistema, los datos y el paquete de ~/Applications.
         public static async Task Desinstala(string datos, Func<Task<bool>> desvincula)
         {

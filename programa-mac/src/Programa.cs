@@ -1,11 +1,11 @@
-// Forever Tracker para Mac (desde la 1.1.4). Lo mismo que el de Windows: sube solo el archivo del addon a la web cada vez que el
+// Forever Tracker para Mac (desde la 1.1.4; paquete universal con lanzador desde la 1.1.5, ver Instalacion.RutaApp). Lo mismo que el de Windows: sube solo el archivo del addon a la web cada vez que el
 // juego lo guarda, instala y mantiene el addon al día y escribe en el addon la lista de encargos. Sin ventana; la de estado sale al
 // abrirlo desde Aplicaciones (hasta que el Mac está vinculado, la bienvenida). La lógica es la de ../programa/src; aquí, la caja.
 //
 // Forma de llamarlo (igual que en Windows):
 //   ForeverTracker                     abrirlo (con la ventana de estado); si ya funciona, enseña su ventana
 //   ForeverTracker --fondo             al arrancar el sistema: sin ventana (el LaunchAgent)
-//   ForeverTracker --desinstalar       (también desde el menú del programa)
+//   ForeverTracker --desinstalar       (también con el botón «Desinstalar…» de la ventana)
 //   ForeverTracker --salir             cierra el que esté funcionando
 //   ForeverTracker --pruebas <carpeta> [--web <dirección>] [--captura <png>] [--vincular]
 //                                      modo de pruebas: datos en esa carpeta, sin instalar nada, con la web que se diga; funciona
@@ -136,17 +136,21 @@ namespace ForeverTracker
             }
         }
 
-        // El menú del programa en Mac (la barra de arriba): desinstalar.
+        // Desinstalar (el botón «Desinstalar…» de la ventana, desde la 1.1.5; también el menú del programa, por si el Mac lo enseña).
+        public static async Task Desinstalar()
+        {
+            await Instalacion.Desinstala(datos, async () => { string k = Clave.Lee(datos); return k == null || (await new Web(WebReal).Delete("/api/programa/yo", k)).Bien; });
+        }
+
+        // El menú del programa en Mac (la barra de arriba): desinstalar. Con LSUIElement (sin icono en el Dock) macOS no enseña la barra
+        // de menús del programa, así que desde la 1.1.5 la ventana lleva el botón «Desinstalar…»; el menú se deja por si acaso.
         static void MenuNativo()
         {
             try
             {
                 var menu = new NativeMenu();
                 var item = new NativeMenuItem("Desinstalar Forever Tracker…");
-                item.Click += async (s, e) =>
-                {
-                    await Instalacion.Desinstala(datos, async () => { string k = Clave.Lee(datos); return k == null || (await new Web(WebReal).Delete("/api/programa/yo", k)).Bien; });
-                };
+                item.Click += async (s, e) => { await Desinstalar(); };
                 menu.Items.Add(item);
                 NativeMenu.SetMenu(Application.Current, menu);
             }

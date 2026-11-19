@@ -54,7 +54,7 @@ Quién ve cada cosa en la web lo eliges tú. Más en la
    cada subida).
 4. **Actualizarse:** la descarga directa (Windows y Mac) se pone al día sola de la misma forma; la versión de la Microsoft
    Store, por la Store.
-5. **Desinstalar:** en Windows, Configuración → Aplicaciones; en Mac, el menú del programa → «Desinstalar…». Desvincula el
+5. **Desinstalar:** en Windows, Configuración → Aplicaciones; en Mac, el botón «Desinstalar Forever Tracker…» de su ventana. Desvincula el
    equipo, borra todo lo suyo y quita el addon del juego (lo que el juego guardó de tus personajes se queda).
 
 ## Compilar
@@ -73,6 +73,10 @@ en un Mac, o `rcodesign sign` desde cualquier sistema).
 ```
 dotnet publish programa-mac/ForeverTrackerMac.csproj -c Release -r osx-arm64 --self-contained   (o -r osx-x64)
 ```
+
+El paquete publicado vale para los dos chips: lleva dentro las dos aplicaciones (`Contents/Helpers/arm64` y `x64`) y un lanzador
+universal (`programa-mac/lanzador/lanzador.c`, compilado con `zig cc -target aarch64-macos` y `x86_64-macos` y juntado con
+`rcodesign macho-universal-create`) que arranca la de su chip.
 
 Para probarlo sin instalarlo ni tocar el registro de Windows:
 

@@ -55,13 +55,16 @@ namespace ForeverTracker
         // El programa se pone al día solo (baja el .zip de su arquitectura y cambia el paquete .app).
         public static bool PuedeActualizarse { get { return true; } }
 
-        // Qué parte de GET /api/programa describe a este programa: «mac» → {version, arm64: {url, sha256, size}, x64: {…}}. Se
-        // devuelve con la forma de «programa» (version, url, sha256, size) para que el agente lo trate igual que en Windows.
+        // Qué parte de GET /api/programa describe a este programa: «mac» → {version, url, sha256, size, arm64: {url, sha256, size},
+        // x64: {…}}. Desde la 1.1.5 el paquete es universal (los dos chips) y va en «url»; «arm64» y «x64» siguen (apuntan al mismo
+        // archivo) para la 1.1.4, que leía el de su chip. Se devuelve con la forma de «programa» (version, url, sha256, size) para que
+        // el agente lo trate igual que en Windows.
         public static Dictionary<string, object> InfoPrograma(Dictionary<string, object> json)
         {
             var mac = J.Obj(json, "mac");
-            var a = J.Obj(mac, Arquitectura);
-            if (mac == null || a == null) return null;
+            if (mac == null) return null;
+            var a = J.Txt(mac, "url") != null ? mac : J.Obj(mac, Arquitectura);
+            if (a == null) return null;
             return new Dictionary<string, object> { { "version", J.Txt(mac, "version") }, { "url", J.Txt(a, "url") }, { "sha256", J.Txt(a, "sha256") }, { "size", J.Num(a, "size") } };
         }
 
@@ -101,6 +104,19 @@ namespace ForeverTracker
                 File.SetUnixFileMode(ruta, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
             }
             catch (Exception e) { Registro.Apunta("No se pudo marcar como ejecutable " + ruta + ": " + e.Message); }
+        }
+
+        // Los ejecutables de un paquete (por si al descomprimir se perdió el permiso): el lanzador y el programa de cada chip.
+        public static void HazEjecutables(string app)
+        {
+            HazEjecutable(Path.Combine(app, "Contents", "MacOS", "ForeverTracker"));
+            string helpers = Path.Combine(app, "Contents", "Helpers");
+            if (!Directory.Exists(helpers)) return;
+            foreach (string d in Directory.GetDirectories(helpers))
+            {
+                HazEjecutable(Path.Combine(d, "Forever Tracker.app", "Contents", "MacOS", "ForeverTracker"));
+                HazEjecutable(Path.Combine(d, "Forever Tracker.app", "Contents", "MacOS", "createdump"));
+            }
         }
 
         // Solo el usuario puede entrar en la carpeta (la clave del PC va dentro).

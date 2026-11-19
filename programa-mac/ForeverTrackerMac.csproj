@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Forever Tracker para Mac (desde la 1.1.4). La lógica (agente, web, juego, ajustes, JSON) es la misma que la del programa de
        Windows: se compilan los mismos archivos de ../programa/src; aquí solo está la «caja» de Mac (ventana con Avalonia, instalación,
-       arranque con el sistema, actualización del paquete .app). Se compila desde Windows: dotnet publish -r osx-arm64 (o osx-x64).
+       arranque con el sistema, actualización del paquete .app). Se compila desde Windows: dotnet publish -r osx-arm64 y osx-x64, y
+       herramientas/programa/empaquetar_mac.py junta los dos en un paquete universal con un lanzador (lanzador/lanzador.c).
        Para probarlo sin un Mac, también se ejecuta en Windows (dotnet run), con la misma lógica. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -12,9 +13,9 @@
     <AssemblyName>ForeverTracker</AssemblyName>
     <RootNamespace>ForeverTracker</RootNamespace>
     <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
-    <Version>1.1.4</Version>
-    <AssemblyVersion>1.1.4.0</AssemblyVersion>
-    <FileVersion>1.1.4.0</FileVersion>
+    <Version>1.1.5</Version>
+    <AssemblyVersion>1.1.5.0</AssemblyVersion>
+    <FileVersion>1.1.5.0</FileVersion>
     <Product>Forever Tracker</Product>
     <AssemblyTitle>Forever Tracker</AssemblyTitle>
     <Company>Forever Tracker</Company>

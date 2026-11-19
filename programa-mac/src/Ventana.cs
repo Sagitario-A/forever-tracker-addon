@@ -155,6 +155,16 @@ namespace ForeverTracker
             var nota = Etiqueta("Puedes cerrar esta ventana: el programa sigue en segundo plano y arranca con el Mac. Vuelve a abrirlo desde Aplicaciones cuando quieras.", Tema.Gris, 12, false, Ancho - 40);
             nota.Margin = new Thickness(0, 16, 0, 0);
             cuerpo.Children.Add(nota);
+            Desinstalar();
+        }
+
+        // El botón de desinstalar (desde la 1.1.5): en Mac el programa no tiene barra de menús (va sin icono en el Dock), así que va aquí.
+        void Desinstalar()
+        {
+            if (!Plataforma.EsMac && Environment.GetEnvironmentVariable("FT_VENTANA_MAC") == null) return; // en Windows solo para la captura de pruebas
+            var b = Tema.Boton("Desinstalar Forever Tracker…", false, async () => { await Programa.Desinstalar(); });
+            b.Margin = new Thickness(0, 14, 8, 0);
+            cuerpo.Children.Add(Tema.Fila(b));
         }
 
         void Vinculado()
@@ -195,6 +205,7 @@ namespace ForeverTracker
                 estadoAddon,
                 ag.MensajeAddon != null ? Etiqueta(ag.MensajeAddon, Tema.Rojo, 12) : null,
                 reintentar ? Tema.Fila(Tema.Boton("Volver a intentar", false, () => ag.ReintentaAddon())) : null));
+            Desinstalar();
         }
 
         async void DetectaCarpeta()
